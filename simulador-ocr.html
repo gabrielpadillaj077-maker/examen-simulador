@@ -114,17 +114,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     margin: 20px 0;
 }
 .hidden { display: none; }
-.timer {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #667eea;
-    color: white;
-    padding: 15px 25px;
-    border-radius: 50px;
-    font-size: 20px;
-    font-weight: bold;
-}
 .progress {
     background: #ddd;
     height: 10px;
@@ -148,12 +137,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
         <div class="card">
             <h3>1. Sube fotos de tus preguntas</h3>
             <p style="color: #666; margin: 10px 0; font-size: 14px;">
-                Sube una o varias fotos de hojas con preguntas tipo test. El OCR extrae el texto automáticamente.
+                Sube una o varias fotos JPG/PNG de hojas con preguntas tipo test
             </p>
 
             <label class="upload-area">
                 <input type="file" id="fileInput" accept="image/*" multiple>
-                📁 Click para subir fotos JPG/PNG
+                📁 Click aquí para subir fotos
                 <div id="fileList"></div>
             </label>
 
@@ -163,7 +152,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
                 <div id="progressText">0%</div>
             </div>
 
-            <textarea id="extractedText" placeholder="El texto extraído aparecerá aquí. Puedes editarlo antes de crear el examen..." class="hidden"></textarea>
+            <textarea id="extractedText" placeholder="El texto extraído aparecerá aquí. Puedes editarlo..." class="hidden"></textarea>
 
             <button id="processBtn" onclick="procesarImagenes()" disabled>Procesar Imágenes con OCR</button>
             <button id="createBtn" onclick="crearExamen()" class="hidden">Crear Simulador de Examen</button>
@@ -192,18 +181,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     </div>
 </div>
 
-<div class="timer hidden" id="timer">30:00</div>
-
 <script>
 let questions = [];
-let originalQuestions = []; // Guardamos copia para repetir
+let originalQuestions = [];
 let currentQ = 0;
 let answers = [];
 let uploadedImages = [];
-let timerInterval = null;
-let timeLeft = 1800;
 
-// Cargar múltiples imágenes
 document.getElementById('fileInput').addEventListener('change', function(e) {
     uploadedImages = Array.from(e.target.files);
     document.getElementById('fileList').innerHTML =
@@ -214,19 +198,15 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 async function procesarImagenes() {
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('processBtn').disabled = true;
-
     let allText = '';
 
     for(let i = 0; i < uploadedImages.length; i++) {
         const file = uploadedImages[i];
-
-        // Mostrar preview
         const img = document.createElement('img');
         img.src = URL.createObjectURL(file);
         img.className = 'preview-img';
         document.getElementById('fileList').appendChild(img);
 
-        // OCR con Tesseract
         const { data: { text } = await Tesseract.recognize(file, 'spa+eng', {
             logger: m => {
                 if(m.status === 'recognizing text') {
@@ -236,7 +216,6 @@ async function procesarImagenes() {
                 }
             }
         });
-
         allText += text + '\n---\n';
     }
 
@@ -249,59 +228,46 @@ async function procesarImagenes() {
 function parseQuestions(text) {
     const blocks = text.split('---').filter(b => b.trim());
     const parsed = [];
-
     blocks.forEach(block => {
         const lines = block.trim().split('\n').filter(l => l.trim());
         if(lines.length < 3) return;
-
         const question = lines[0].trim();
         const options = [];
         let correct = '';
-
         lines.forEach(line => {
             line = line.trim();
-            if(/^[A-Da-d]\)/.test(line)) {
-                options.push(line);
-            }
-            if(line.toUpperCase().includes('RESPUESTA') || line.toUpperCase().includes('ANSWER')) {
+            if(/^[A-Da-d]\)/.test(line)) options.push(line);
+            if(line.toUpperCase().includes('RESPUESTA')) {
                 correct = line.split(':')[1]?.trim().toUpperCase().charAt(0) || '';
             }
         });
-
-        if(question && options.length > 0) {
-            parsed.push({ question, options, correct });
-        }
+        if(question && options.length > 0) parsed.push({ question, options, correct });
     });
-
     return parsed;
 }
 
 function crearExamen() {
     const text = document.getElementById('extractedText').value;
     questions = parseQuestions(text);
-
     if(questions.length === 0) {
-        alert('No se detectaron preguntas. Edita el texto y asegúrate del formato: Pregunta + A) B) C) + RESPUESTA: X');
+        alert('No se detectaron preguntas. Formato: Pregunta + A) B) C) + RESPUESTA: X');
         return;
     }
-
-    originalQuestions = JSON.parse(JSON.stringify(questions)); // Guardar copia
+    originalQuestions = JSON.parse(JSON.stringify(questions));
     iniciarIntento();
 }
 
 function iniciarIntento() {
     answers = new Array(questions.length).fill(null);
     currentQ = 0;
-
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('examScreen').classList.remove('hidden');
     document.getElementById('resultScreen').classList.add('hidden');
-
     mostrarPregunta();
 }
 
 function reiniciarIntento() {
-    questions = JSON.parse(JSON.stringify(originalQuestions)); // Resetear
+    questions = JSON.parse(JSON.stringify(originalQuestions));
     iniciarIntento();
 }
 
@@ -310,12 +276,10 @@ function mostrarPregunta() {
     let html = `<div class="question">
         <h3>Pregunta ${currentQ + 1} de ${questions.length}</h3>
         <p style="font-size: 18px; margin-bottom: 20px;">${q.question}</p>`;
-
     q.options.forEach((opt, i) => {
         const selected = answers[currentQ] === i? 'selected' : '';
         html += `<button class="option ${selected}" onclick="seleccionar(${i})">${opt}</button>`;
     });
-
     html += '</div>';
     document.getElementById('questionContainer').innerHTML = html;
 }
@@ -340,8 +304,6 @@ function siguiente() {
 }
 
 function terminarExamen() {
-    if(timerInterval) clearInterval(timerInterval);
-
     let correctas = 0;
     questions.forEach((q, i) => {
         const userAns = answers[i];
@@ -350,17 +312,12 @@ function terminarExamen() {
         );
         if(userAns === correctIdx) correctas++;
     });
-
     const porcentaje = Math.round((correctas / questions.length) * 100);
-
     document.getElementById('examScreen').classList.add('hidden');
     document.getElementById('resultScreen').classList.remove('hidden');
-
     document.getElementById('scoreDisplay').textContent = `${correctas}/${questions.length}`;
     document.getElementById('scoreText').innerHTML =
         `Nota: ${porcentaje}% - ${porcentaje >= 70? 'Aprobado ✅' : 'Reprobado ❌'}`;
-
-    // Revisión
     let reviewHtml = '<h3 style="margin-top: 30px;">Revisión:</h3>';
     questions.forEach((q, i) => {
         const userAns = answers[i];
@@ -368,7 +325,6 @@ function terminarExamen() {
             opt.toUpperCase().startsWith(q.correct + ')')
         );
         const esCorrecta = userAns === correctIdx;
-
         reviewHtml += `<div class="question">
             <strong>P${i+1}: ${q.question}</strong><br>
             <span style="color: ${esCorrecta? '#10B981' : '#EF4444'}">
